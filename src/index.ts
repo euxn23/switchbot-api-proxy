@@ -1,32 +1,52 @@
-/**
- * Welcome to Cloudflare Workers! This is your first worker.
- *
- * - Run `npm run dev` in your terminal to start a development server
- * - Open a browser tab at http://localhost:8787/ to see your worker in action
- * - Run `npm run deploy` to publish your worker
- *
- * Learn more at https://developers.cloudflare.com/workers/
- */
+import { callSwitchbotAPI } from './switchbot-api';
 
 export interface Env {
-	// Example binding to KV. Learn more at https://developers.cloudflare.com/workers/runtime-apis/kv/
-	// MY_KV_NAMESPACE: KVNamespace;
-	//
-	// Example binding to Durable Object. Learn more at https://developers.cloudflare.com/workers/runtime-apis/durable-objects/
-	// MY_DURABLE_OBJECT: DurableObjectNamespace;
-	//
-	// Example binding to R2. Learn more at https://developers.cloudflare.com/workers/runtime-apis/r2/
-	// MY_BUCKET: R2Bucket;
-	//
-	// Example binding to a Service. Learn more at https://developers.cloudflare.com/workers/runtime-apis/service-bindings/
-	// MY_SERVICE: Fetcher;
-	//
-	// Example binding to a Queue. Learn more at https://developers.cloudflare.com/queues/javascript-apis/
-	// MY_QUEUE: Queue;
+  ACCESS_CONTROL_ALLOW_ORIGIN: string;
+  SWITCHBOT_API_PATH: string;
+  SWITCHBOT_API_TOKEN: string;
+  SWITCHBOT_API_SECRET: string;
 }
 
 export default {
-	async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
-		return new Response('Hello World!');
-	},
+  async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
+    if (request.method === 'OPTIONS') {
+      if (
+        request.headers.get("Origin") !== null &&
+        request.headers.get("Access-Control-Request-Method") !== null &&
+        request.headers.get("Access-Control-Request-Headers") !== null
+      ) {
+        return new Response(null, {
+          headers: {
+            'Access-Control-Allow-Origin': env.ACCESS_CONTROL_ALLOW_ORIGIN,
+            'Access-Control-Allow-Methods': 'POST,OPTIONS',
+            "Access-Control-Allow-Headers": 'Content-Type',
+          },
+        });
+      } else {
+        return new Response(null, {
+          headers: {
+            Allow: "POST, OPTIONS",
+          },
+        });
+      }
+    }
+    if (request.method !== 'POST') {
+      return new Response(JSON.stringify({ result: 'failure', error: 'Invalid method' }), { status: 400 , headers: { 'Content-Type': 'application/json' }});
+    }
+    try {
+      const path = env.SWITCHBOT_API_PATH;
+      const token = env.SWITCHBOT_API_TOKEN;
+      const secret = env.SWITCHBOT_API_SECRET;
+
+      await callSwitchbotAPI('POST', path, token, secret);
+      const headers = new Headers({
+        'Content-Type': 'application/json',
+        'Access-Control-Allow-Origin': env.ACCESS_CONTROL_ALLOW_ORIGIN,
+      })
+      return new Response(JSON.stringify({ result: 'success' }), { status: 200, headers });
+    } catch (e) {
+      console.error(e);
+      return new Response(JSON.stringify({ result: 'failure', error: String(e) }), { status: 500, headers: { 'Content-Type': 'application/json' }});
+    }
+  },
 };
